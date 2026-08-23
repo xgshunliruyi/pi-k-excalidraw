@@ -436,9 +436,13 @@ export default function excalidrawExtension(pi: ExtensionAPI): void {
 
 			const text =
 				`Diagram rendered (${resolved.length} elements). Checkpoint id: "${checkpointId}".\n` +
-				`Next step: call screenshot_diagram to visually verify the layout (overlaps, truncated text, off-camera elements, low contrast). ` +
+				`Next step: verify the layout (overlaps, truncated text, off-camera elements, low contrast). ` +
+				`If your model can receive images in tool results, call screenshot_diagram and inspect the PNG. ` +
+				`If image attachments are omitted for your model, do NOT call screenshot_diagram — verify programmatically instead ` +
+				`(recompute element bounding boxes from the coordinates you emitted; check text wider than its container, ` +
+				`overlapping elements, and elements outside the final cameraUpdate viewport). ` +
 				`If anything looks wrong, fix it with another draw_diagram call prefixed with [{"type":"restoreCheckpoint","id":"${checkpointId}"}, ...] and use {"type":"delete","ids":"id1,id2"} to remove broken pieces. ` +
-				`Repeat screenshot_diagram → fix until the diagram looks correct, then summarise for the user.\n` +
+				`Iterate until the diagram is correct, then summarise for the user.\n` +
 				`To save the file, call save_diagram with a path.`;
 
 			return {
@@ -592,7 +596,7 @@ export default function excalidrawExtension(pi: ExtensionAPI): void {
 			"Capture a PNG screenshot of the current diagram and return it as an image you can visually inspect. Use after draw_diagram to verify layout, label readability, and alignment, then iterate with another draw_diagram call if needed.",
 		parameters: Type.Object({}),
 
-		async execute(_toolCallId, _params, signal): Promise<ToolResult> {
+		async execute(_toolCallId, _params, signal, _onUpdate, ctx): Promise<ToolResult> {
 			if (!lastCheckpointId) return errorResult("No diagram to screenshot — call draw_diagram first.");
 			if (!activeWindow) return errorResult("Preview window is not open. Call draw_diagram first.");
 
@@ -605,9 +609,28 @@ export default function excalidrawExtension(pi: ExtensionAPI): void {
 
 			if (!result.base64) return errorResult("Diagram is empty — nothing to screenshot.");
 
+			// Persist the PNG next to saved diagrams so the user (or a vision-capable
+			// model reading files) can inspect it even when inline image attachments
+			// are omitted for the current model.
+			let savedPath: string | null = null;
+			try {
+				const dir = path.join(ctx.cwd, DEFAULT_DIAGRAM_DIR, ".screenshots");
+				await fs.mkdir(dir, { recursive: true });
+				savedPath = path.join(dir, `${lastCheckpointId}.png`);
+				await fs.writeFile(savedPath, Buffer.from(result.base64, "base64"));
+			} catch {
+				savedPath = null;
+			}
+
 			return {
 				content: [
-					{ type: "text", text: `Screenshot of ${result.count} element(s) attached for visual inspection.` },
+					{
+						type: "text",
+						text:
+							`Screenshot of ${result.count} element(s) captured` +
+							(savedPath ? ` and saved to ${relativeDisplay(ctx.cwd, savedPath)}.` : ".") +
+							" If your model cannot receive images, open the PNG manually or verify layout programmatically.",
+					},
 					{ type: "image", data: result.base64, mimeType: "image/png" },
 				],
 				details: {
@@ -659,9 +682,11 @@ export default function excalidrawExtension(pi: ExtensionAPI): void {
 
 			const text =
 				`Mermaid diagram rendered (${elements.length} elements). Checkpoint id: "${checkpointId}".\n` +
-				`Next step: call screenshot_diagram to visually verify the layout. ` +
+				`Next step: verify the layout. If your model can receive images in tool results, call screenshot_diagram and inspect the PNG. ` +
+				`If image attachments are omitted for your model, skip screenshots and verify programmatically ` +
+				`(bounding-box/overlap/clip checks from your emitted coordinates). ` +
 				`If anything looks wrong, fix it with another draw_diagram call prefixed with [{"type":"restoreCheckpoint","id":"${checkpointId}"}, ...] and use {"type":"delete","ids":"id1,id2"} to remove broken pieces. ` +
-				`Repeat screenshot_diagram → fix until the diagram looks correct, then summarise for the user.\n` +
+				`Iterate until the diagram looks correct, then summarise for the user.\n` +
 				`To save it, call save_diagram with a name.`;
 			return {
 				content: [{ type: "text", text }],
@@ -684,7 +709,9 @@ export default function excalidrawExtension(pi: ExtensionAPI): void {
 			}
 			cheatSheetActive = true;
 			reviewLoopActive = true;
-			pi.sendUserMessage(DRAW_INSTRUCTION_TEMPLATE.replace("{{task}}", task));
+			pi.sendUserMessage(DRAW_INSTRUCTION_TEMPLATE.replace("{{task}}", task), {
+				deliverAs: "followUp",
+			});
 		},
 	});
 
@@ -737,10 +764,13 @@ export default function excalidrawExtension(pi: ExtensionAPI): void {
 			.replace("{{comments}}", commentBlock)
 			.replace("{{checkpointId}}", lastCheckpointId);
 
-		pi.sendUserMessage([
-			{ type: "text", text: userText },
-			{ type: "image", data: shot.base64, mimeType: "image/png" },
-		]);
+		pi.sendUserMessage(
+			[
+				{ type: "text", text: userText },
+				{ type: "image", data: shot.base64, mimeType: "image/png" },
+			],
+			{ deliverAs: "followUp" },
+		);
 	});
 
 	pi.on("before_agent_start", async (event) => {
