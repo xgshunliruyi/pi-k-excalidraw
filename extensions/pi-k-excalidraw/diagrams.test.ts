@@ -127,14 +127,37 @@ describe("buildExcalidrawFile", () => {
 		assert.equal(f.type, "excalidraw");
 		assert.equal(f.version, 2);
 		assert.equal(f.source, "https://excalidraw.com");
-		assert.deepEqual(f.elements, elements);
 		assert.deepEqual(f.appState, { gridSize: null, viewBackgroundColor: "#ffffff" });
 		assert.deepEqual(f.files, {});
 	});
 
+	it("enriches elements to the full excalidraw.com schema", () => {
+		const f = buildExcalidrawFile(elements);
+		const [r] = f.elements as Record<string, unknown>[];
+		assert.equal(r.id, "r1");
+		assert.equal(r.version, 1);
+		assert.ok(r.seed && r.versionNonce && r.updated, "seed/versionNonce/updated present");
+		assert.deepEqual(r.groupIds, []);
+		assert.equal(r.angle, 0);
+		assert.equal(r.roundness, null);
+		assert.equal(r.boundElements, null);
+		assert.equal(r.locked, false);
+
+		const [t] = buildExcalidrawFile([
+			{ type: "text", id: "t1", x: 0, y: 0, text: "Hi", fontSize: 16 },
+		]).elements as Record<string, unknown>[];
+		assert.ok((t.width as number) > 0, "text width measured");
+		assert.equal(t.height, 20);
+		assert.equal(t.fontFamily, 5);
+		assert.equal(t.originalText, "Hi");
+	});
+
 	it("round-trips through JSON.stringify → parseExcalidrawFile", () => {
 		const json = JSON.stringify(buildExcalidrawFile(elements));
-		assert.deepEqual(parseExcalidrawFile(json), elements);
+		const back = parseExcalidrawFile(json);
+		assert.equal(back.length, 1);
+		assert.equal(back[0].id, "r1");
+		assert.equal((back[0] as Record<string, unknown>).version, 1);
 	});
 
 	it("preserves an empty element array", () => {

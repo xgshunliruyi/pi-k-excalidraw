@@ -10,6 +10,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import type { ExcalidrawElement } from "./parser.ts";
+import { enrichElements } from "./fontMetrics.ts";
 
 /** Default project-relative directory for saved Excalidraw diagrams. */
 export const DEFAULT_DIAGRAM_DIR = path.join(".pi", "excalidraw-diagrams");
@@ -46,11 +47,14 @@ export function slugifyDiagramName(name: string): string {
 
 /** Build the Excalidraw v2 file format wrapper around an element array. */
 export function buildExcalidrawFile(elements: ExcalidrawElement[]): Record<string, unknown> {
+	// Enrich to the full excalidraw.com schema (text width/height/fontFamily,
+	// seed/version/groupIds/... ) — otherwise the file opens with invisible text
+	// (imports run with refreshDimensions: false and zero-sized text is dropped).
 	return {
 		type: "excalidraw",
 		version: 2,
 		source: "https://excalidraw.com",
-		elements,
+		elements: enrichElements(elements),
 		appState: { gridSize: null, viewBackgroundColor: "#ffffff" },
 		files: {},
 	};
