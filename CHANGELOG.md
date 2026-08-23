@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased] - local fixes
+
+- **Save format**: `save_diagram` now enriches elements to the full
+  excalidraw.com schema before writing — text width/height are measured
+  against a bundled Excalifont latin TTF (`fontMetrics.ts`, zero deps,
+  CJK at 1em per glyph), `fontFamily`/`seed`/`version`/… defaults are filled,
+  and the `label` shorthand is converted to a centered standalone text
+  element. Saved files open directly in excalidraw.com; no post-processing
+  script needed.
+- **Screenshot persistence**: `screenshot_diagram` also writes the PNG to
+  `.pi/excalidraw-diagrams/.screenshots/<checkpoint>.png` and reports the
+  path, so non-vision models (and the user) can inspect it without relying
+  on inline attachments.
+- **Non-vision models**: draw/mermaid/review instructions now branch on
+  image support — models that cannot receive images verify layout
+  programmatically instead of looping on invisible screenshots.
+- **Review loop**: `agent_end` review messages are queued with
+  `deliverAs: "followUp"`, fixing the
+  `Extension "<runtime>" error: Agent is already processing` crash.
+
 ## [0.2.0] - 2026-05-03
 
 Adds a full diagramming workflow on top of the v0.1.0 preview tool. Four new

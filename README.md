@@ -64,8 +64,8 @@ Then `/reload` in pi.
 |------|-------------|
 | `draw_diagram` | Render an array of Excalidraw elements in a glimpse preview window. Streams partial JSON so long diagrams update incrementally. |
 | `draw_mermaid_diagram` | Convert a Mermaid diagram (flowchart, sequence, class, ER) into native Excalidraw elements and render in the same preview. |
-| `screenshot_diagram` | Capture the current preview as a PNG and return it as image content so the model can visually inspect and self-correct. |
-| `save_diagram` | Write the current diagram to a `.excalidraw` file. Pass `name` to save under `.pi/excalidraw-diagrams/`, or `path` for a custom location. |
+| `screenshot_diagram` | Capture the current preview as a PNG, save it to `.pi/excalidraw-diagrams/.screenshots/<checkpoint>.png`, and return it as image content so the model can visually inspect and self-correct. |
+| `save_diagram` | Write the current diagram to a `.excalidraw` file. Elements are auto-enriched to the full excalidraw.com schema (measured text width/height, `fontFamily`, `seed`/`version`/…, `label` shorthand converted to standalone text) so saved files open correctly in excalidraw.com with no post-processing. Pass `name` to save under `.pi/excalidraw-diagrams/`, or `path` for a custom location. |
 | `list_diagrams` | List previously saved diagrams under `.pi/excalidraw-diagrams/`. |
 | `load_diagram` | Load a saved `.excalidraw` file back into the preview as a new checkpoint so you can extend it with more `draw_diagram` calls. |
 
@@ -74,6 +74,14 @@ Then `/reload` in pi.
 | Command | Description |
 |---------|-------------|
 | `/excalidraw <description>` | Kick off a drawing turn. The Excalidraw element-format cheat sheet is injected into the system prompt for the rest of the session, so the model never has to ask for it. After every drawing turn pi prompts you to send the screenshot back to the LLM with optional comments for another refinement pass — decline to exit the loop. |
+
+### Saved-file compatibility
+
+`save_diagram` writes files that open directly in [excalidraw.com](https://excalidraw.com) (and Obsidian's Excalidraw plugin). Text dimensions are measured against the bundled Excalifont latin metrics (`extensions/pi-k-excalidraw/assets/excalifont-latin.ttf`, parsed at runtime with no dependencies); CJK and full-width characters measure at 1em per glyph, mirroring browser fallback fonts. See `fontMetrics.ts`.
+
+### Visual verification and non-vision models
+
+The screenshot round-trip only works when the active model can receive image attachments. `draw_diagram`'s result text and the `/excalidraw` review prompts adapt automatically: vision-capable models are told to screenshot-and-inspect, others are told to verify layout programmatically (bounding-box / overlap / clipping checks from their emitted coordinates) instead of chasing an image they cannot see.
 
 ### Clipboard export
 
